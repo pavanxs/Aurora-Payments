@@ -20,22 +20,22 @@ export const authClient = createAuthClient({
     }
 })  
 
-// Export the sign in function for GitHub
-export const signInWithGitHub = async (callbackURL?: string) => {
+// Export social sign in functions for all providers
+export const signInWithSocial = async (provider: string, callbackURL?: string) => {
     try {
-        console.log("Attempting GitHub sign in...");
+        console.log(`Attempting ${provider} sign in...`);
         const data = await authClient.signIn.social({
-            provider: "github",
+            provider: provider as any,
             callbackURL: callbackURL || "/claim"
         });
-        console.log("GitHub sign in data:", data);
+        console.log(`${provider} sign in data:`, data);
         return data;
     } catch (error: any) {
-        console.error("GitHub sign in error:", error);
+        console.error(`${provider} sign in error:`, error);
 
         // Provide more helpful error messages
         if (error?.message?.includes("Cannot read properties of undefined")) {
-            throw new Error("Authentication configuration error. Please check your environment variables and restart the development server.");
+            throw new Error(`${provider} authentication configuration error. Please check your environment variables and restart the development server.`);
         }
 
         if (error?.message?.includes("fetch")) {
@@ -44,5 +44,10 @@ export const signInWithGitHub = async (callbackURL?: string) => {
 
         throw error;
     }
+}
+
+// Legacy GitHub function for backwards compatibility
+export const signInWithGitHub = async (callbackURL?: string) => {
+    return signInWithSocial("github", callbackURL);
 }
 

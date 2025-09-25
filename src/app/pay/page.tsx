@@ -19,6 +19,45 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { authClient } from "@/lib/auth-client";
+import { SocialAuthDropdown, socialProviders, getProviderById } from "@/components/auth";
+import { MODULE_ADDRESS } from "@/constants";
+
+// Helper functions for recipient input
+const getRecipientPlaceholder = (provider: string) => {
+  const placeholders: Record<string, string> = {
+    github: 'username',
+    google: 'user@gmail.com',
+    discord: '123456789012345678',
+    twitter: '@username',
+    facebook: 'user@facebook.com',
+    apple: 'user@icloud.com',
+    microsoft: 'user@outlook.com',
+    linkedin: 'user@linkedin.com',
+    spotify: 'spotify_user_id',
+    twitch: 'twitch_username',
+    reddit: 'reddit_username',
+    figma: 'user@example.com'
+  };
+  return placeholders[provider] || 'user_identifier';
+};
+
+const getRecipientHelpText = (provider: string) => {
+  const helpTexts: Record<string, string> = {
+    github: 'GitHub username (without @)',
+    google: 'Gmail address',
+    discord: 'Discord user ID (18-digit number)',
+    twitter: 'Twitter username (with or without @)',
+    facebook: 'Facebook email or username',
+    apple: 'Apple ID email',
+    microsoft: 'Microsoft account email',
+    linkedin: 'LinkedIn profile email',
+    spotify: 'Spotify user ID',
+    twitch: 'Twitch username',
+    reddit: 'Reddit username',
+    figma: 'Email associated with Figma account'
+  };
+  return helpTexts[provider] || 'Platform-specific user identifier';
+};
 
 export default function PayPage() {
   const { account } = useWallet();
@@ -343,24 +382,17 @@ export default function PayPage() {
                       <SelectValue placeholder="Select platform" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="github">
-                        <div className="flex items-center gap-2">
-                          <Github className="h-4 w-4" />
-                          GitHub
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="discord">
-                        <div className="flex items-center gap-2">
-                          <span className="h-4 w-4 text-blue-500">💬</span>
-                          Discord
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="figma">
-                        <div className="flex items-center gap-2">
-                          <span className="h-4 w-4 text-purple-500">🎨</span>
-                          Figma
-                        </div>
-                      </SelectItem>
+                      {socialProviders.map((provider) => {
+                        const IconComponent = provider.icon;
+                        return (
+                          <SelectItem key={provider.id} value={provider.id}>
+                            <div className="flex items-center gap-2">
+                              <IconComponent className="h-4 w-4" />
+                              {provider.name}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -370,25 +402,17 @@ export default function PayPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="recipient-handle">
-                    {selectedProvider === 'github' && 'GitHub Username'}
-                    {selectedProvider === 'discord' && 'Discord User ID'}
-                    {selectedProvider === 'figma' && 'Figma Email'}
+                    {getProviderById(selectedProvider)?.name || 'Platform'} Identifier
                   </Label>
                   <Input
                     id="recipient-handle"
                     type="text"
-                    placeholder={
-                      selectedProvider === 'github' ? 'username' :
-                      selectedProvider === 'discord' ? '123456789012345678' :
-                      'user@example.com'
-                    }
+                    placeholder={getRecipientPlaceholder(selectedProvider)}
                     value={providerUserId}
                     onChange={(e) => setProviderUserId(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {selectedProvider === 'github' && 'GitHub username (without @)'}
-                    {selectedProvider === 'discord' && 'Discord user ID (18-digit number)'}
-                    {selectedProvider === 'figma' && 'Email associated with Figma account'}
+                    {getRecipientHelpText(selectedProvider)}
                   </p>
                 </div>
 
@@ -455,24 +479,24 @@ export default function PayPage() {
 
                 <Separator />
 
-                {/* GitHub Authentication Section */}
+                {/* Social Authentication Section */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <Github className="h-4 w-4" />
-                    <h3 className="text-lg font-semibold">GitHub Authentication</h3>
+                    <Wallet className="h-4 w-4" />
+                    <h3 className="text-lg font-semibold">Social Authentication</h3>
                   </div>
 
                   {authUser ? (
                     <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-950">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Github className="h-5 w-5 text-green-600" />
+                          <Wallet className="h-5 w-5 text-green-600" />
                           <div>
                             <p className="font-medium text-green-800 dark:text-green-200">
                               Authenticated as {authUser.name || authUser.email}
                             </p>
                             <p className="text-sm text-green-600 dark:text-green-400">
-                              GitHub account verified
+                              Social account verified
                             </p>
                           </div>
                         </div>
@@ -489,27 +513,14 @@ export default function PayPage() {
                   ) : (
                     <div className="space-y-3">
                       <p className="text-sm text-muted-foreground">
-                        Sign in with GitHub to claim funds securely
+                        Sign in with any social provider to claim funds securely
                       </p>
 
-                      <Button
-                        onClick={handleGitHubAuth}
-                        disabled={isAuthenticating}
-                        className="w-full"
+                      <SocialAuthDropdown
+                        callbackURL="/pay"
+                        placeholder="Choose authentication provider"
                         size="lg"
-                      >
-                        {isAuthenticating ? (
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Authenticating with GitHub...
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <Github className="h-4 w-4" />
-                            Sign in with GitHub
-                          </div>
-                        )}
-                      </Button>
+                      />
                     </div>
                   )}
                 </div>
