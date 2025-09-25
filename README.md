@@ -15,6 +15,8 @@ To get started with the Boilerplate template and learn more about the template f
 - **Message board functionality implementation** - Pre-made `message` components to send and read a message on chain
 - **Payment Escrow System** - Full-featured escrow functionality with off-chain validation support
 
+###wow
+
 
 ## What tools the template uses?
 
