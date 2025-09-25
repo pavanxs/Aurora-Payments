@@ -16,6 +16,8 @@ import Link from "next/link";
 import { getAccountAPTBalance } from "@/view-functions/getAccountBalance";
 import { COIN_ABI } from "@/utils/coin_abi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { authClient } from "@/lib/auth-client";
 
 export default function PayPage() {
@@ -26,6 +28,9 @@ export default function PayPage() {
 
   // State for send mode
   const [transferAmount, setTransferAmount] = useState<string>("");
+  const [selectedProvider, setSelectedProvider] = useState<string>("github");
+  const [providerUserId, setProviderUserId] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
   // Authentication state (only used for claiming)
@@ -114,11 +119,11 @@ export default function PayPage() {
   const balanceInAPT = aptBalance / Math.pow(10, 8);
 
   const handleTransfer = async () => {
-    if (!client || !transferAmount) {
+    if (!client || !transferAmount || !providerUserId.trim()) {
       toast({
         variant: "destructive",
         title: "Missing Information",
-        description: "Please specify amount to send",
+        description: "Please specify amount and recipient handle",
       });
       return;
     }
@@ -145,29 +150,67 @@ export default function PayPage() {
     setIsLoading(true);
 
     try {
-      // Send to escrow address
       const escrowAddress = "0x28cf259696b0daed4e12ea033a190cef6276c4ca412b615afeff787f4497ef11";
+      const amountInOctas = Math.pow(10, 8) * amount;
 
-      const committedTransaction = await client.useABI(COIN_ABI).transfer({
-        type_arguments: ["0x1::aptos_coin::AptosCoin"],
-        arguments: [escrowAddress as `0x${string}`, Math.pow(10, 8) * amount],
+      // Call the new deposit_payment function
+      const committedTransaction = await client.submitTransaction({
+        sender: account!.address,
+        data: {
+          function: `${MODULE_ADDRESS}::PaymentEscrow::deposit_payment`,
+          typeArguments: [],
+          functionArguments: [
+            escrowAddress,
+            selectedProvider,
+            providerUserId.trim(),
+            amountInOctas
+          ],
+        },
       });
 
       await aptosClient().waitForTransaction({
         transactionHash: committedTransaction.hash,
       });
 
+      // Store metadata in database
+      try {
+        const response = await fetch('/api/escrow/deposit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            escrowAddress,
+            transactionHash: committedTransaction.hash,
+            provider: selectedProvider,
+            providerUserId: providerUserId.trim(),
+            senderAddress: account!.address.toString(),
+            amount: amountInOctas.toString(),
+            message: message.trim() || null
+          })
+        });
+
+        if (!response.ok) {
+          console.warn('Failed to store payment metadata:', await response.text());
+        }
+      } catch (dbError) {
+        console.warn('Database storage failed:', dbError);
+        // Don't fail the whole transaction for DB issues
+      }
+
       queryClient.invalidateQueries({
         queryKey: ["apt-balance", account?.address],
       });
 
       toast({
-        title: "Transfer Successful",
-        description: `Sent ${amount} APT to escrow account for secure holding`,
+        title: "Payment Sent Successfully!",
+        description: `Sent ${amount} APT to ${selectedProvider} user: ${providerUserId}`,
       });
 
       // Clear form
       setTransferAmount("");
+      setProviderUserId("");
+      setMessage("");
 
     } catch (error: any) {
       console.error("Transfer error:", error);
@@ -294,17 +337,58 @@ export default function PayPage() {
                 <Separator />
 
                 <div className="space-y-2">
-                  <Label htmlFor="escrow-address">Escrow Address</Label>
+                  <Label htmlFor="provider">Platform</Label>
+                  <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select platform" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="github">
+                        <div className="flex items-center gap-2">
+                          <Github className="h-4 w-4" />
+                          GitHub
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="discord">
+                        <div className="flex items-center gap-2">
+                          <span className="h-4 w-4 text-blue-500">💬</span>
+                          Discord
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="figma">
+                        <div className="flex items-center gap-2">
+                          <span className="h-4 w-4 text-purple-500">🎨</span>
+                          Figma
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Platform where the recipient can be found
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="recipient-handle">
+                    {selectedProvider === 'github' && 'GitHub Username'}
+                    {selectedProvider === 'discord' && 'Discord User ID'}
+                    {selectedProvider === 'figma' && 'Figma Email'}
+                  </Label>
                   <Input
-                    id="escrow-address"
+                    id="recipient-handle"
                     type="text"
-                    placeholder="0x28cf259696b0daed4e12ea033a190cef6276c4ca412b615afeff787f4497ef11"
-                    value="0x28cf259696b0daed4e12ea033a190cef6276c4ca412b615afeff787f4497ef11"
-                    disabled
-                    className="font-mono bg-muted"
+                    placeholder={
+                      selectedProvider === 'github' ? 'username' :
+                      selectedProvider === 'discord' ? '123456789012345678' :
+                      'user@example.com'
+                    }
+                    value={providerUserId}
+                    onChange={(e) => setProviderUserId(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Funds will be sent to the escrow account for secure holding
+                    {selectedProvider === 'github' && 'GitHub username (without @)'}
+                    {selectedProvider === 'discord' && 'Discord user ID (18-digit number)'}
+                    {selectedProvider === 'figma' && 'Email associated with Figma account'}
                   </p>
                 </div>
 
@@ -323,21 +407,36 @@ export default function PayPage() {
                   </p>
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="message">Message (Optional)</Label>
+                  <Textarea
+                    id="message"
+                    placeholder="Payment for work completed..."
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional message for the recipient
+                  </p>
+                </div>
+
                 <Button
                   onClick={handleTransfer}
-                  disabled={isLoading || !transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > balanceInAPT}
+                  disabled={isLoading || !transferAmount || !providerUserId.trim() || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > balanceInAPT}
                   className="w-full"
                   size="lg"
                 >
                   {isLoading ? (
                     <div className="flex items-center gap-2">
                       <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Sending to Escrow...
+                      Sending Payment...
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <Send className="h-4 w-4" />
-                      Send {transferAmount ? `${transferAmount} APT` : "Money"} to Escrow
+                      Send {transferAmount ? `${transferAmount} APT` : "Payment"} 
+                      {providerUserId && ` to ${providerUserId}`}
                     </div>
                   )}
                 </Button>

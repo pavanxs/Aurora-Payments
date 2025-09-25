@@ -17,7 +17,13 @@ export const auth = betterAuth({
         github: {
             clientId: process.env.GITHUB_CLIENT_ID || "your_github_client_id_here",
             clientSecret: process.env.GITHUB_CLIENT_SECRET || "your_github_client_secret_here",
-        }
+        },
+        discord: {
+            clientId: process.env.DISCORD_CLIENT_ID || "your_discord_client_id_here",
+            clientSecret: process.env.DISCORD_CLIENT_SECRET || "your_discord_client_secret_here",
+        },
+        // Note: Figma OAuth is not natively supported by better-auth
+        // We'll need to implement custom OAuth for Figma
     },
     baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000",
     trustedOrigins: ["http://localhost:3000"],

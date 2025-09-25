@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, bigint } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -53,6 +53,36 @@ export const verification = pgTable("verification", {
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
+
+export const escrowPayment = pgTable("escrow_payment", {
+  id: text("id").primaryKey(),
+  // On-chain data
+  escrowAddress: text("escrow_address").notNull(),
+  paymentId: integer("payment_id").notNull(), // ID from smart contract
+  transactionHash: text("transaction_hash"), // Deposit transaction hash
+  
+  // Provider info
+  provider: text("provider").notNull(), // "github", "discord", "figma"
+  providerUserId: text("provider_user_id").notNull(), // GitHub username, Discord ID, etc.
+  
+  // Payment details
+  senderAddress: text("sender_address").notNull(),
+  amount: bigint("amount", { mode: "bigint" }).notNull(), // Amount in smallest unit (octas for APT)
+  
+  // Status tracking
+  status: text("status").notNull().default("pending"), // "pending", "claimed", "expired"
+  claimedAt: timestamp("claimed_at"),
+  claimedBy: text("claimed_by"), // Recipient wallet address
+  claimTransactionHash: text("claim_transaction_hash"),
+  
+  // Metadata
+  message: text("message"), // Optional message from sender
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
